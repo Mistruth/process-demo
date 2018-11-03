@@ -1,5 +1,5 @@
 <template>
-  <div @click="nodeClick" class="v-process-node">{{data.name}}</div>
+  <div  @click="nodeClick" :data-id="data.name" class="v-process-node">{{data.alias}}</div>
 </template>
 
 <script>
@@ -37,14 +37,14 @@ export default {
   border: 1px solid #ccc;
   line-height: 50px;
   text-align: center;
-  background-color: teal;
+  /* background-color: teal; */
   opacity: 0.8;
-  border-radius: 5px;
-  color: #fff;
+  border-radius: 3px;
+  color: #888;
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
   user-select: none;
-  z-index:999999;
+  z-index:9999;
 }
 </style>

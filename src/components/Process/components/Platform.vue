@@ -2,6 +2,7 @@
   <div class="v-process-platform-container">
     <div class="v-process-platform">
       <Node
+      @dblclick.native="nodeDbclick(item)"
       v-for="(item,index) in nodeList"
       :key="index"
       :name="item.name"
@@ -15,6 +16,7 @@
           </marker>
         </defs>
         <line
+          @click="lineClick(item)"
           v-for="(item,index) in linkList" :key="'line'+index"
           :class="['v-process-line-default',{'v-process-linking':item.lineStyle.dash}]"
           :x1="item.position.startX"
@@ -34,70 +36,24 @@ export default {
     Node
   },
   data () {
-    return {
-      drag: false,
-      link: true,
-      toNode: {},
-      fromNode: {}
-    }
+    return {}
   },
   props: {
     nodeList: {
       type: Array,
-      default: () => [
-        {
-          name: '节点1',
-          left: 100,
-          top: 200,
-          width: 100,
-          height: 50,
-          flag: true
-        },
-        {
-          name: '节点2',
-          left: 200,
-          top: 300,
-          width: 100,
-          height: 50
-        },
-        {
-          name: '节点3',
-          left: 400,
-          top: 100,
-          width: 100,
-          height: 50
-        }
-      ]
+      default: () => []
     },
     linkList: {
       type: Array,
-      default: () => [
-        {
-          to: {
-            name: '节点2',
-            left: 100,
-            top: 200,
-            width: 100,
-            height: 50
-          },
-          from: {
-            name: '节点1',
-            left: 200,
-            top: 300,
-            width: 100,
-            height: 50
-          },
-          position: {
-            startX: 175,
-            startY: 250,
-            endX: 225,
-            endY: 300
-          },
-          lineStyle: {
-            dash: false
-          }
-        }
-      ]
+      default: () => []
+    },
+    drag: {
+      type: Boolean,
+      default: true
+    },
+    link: {
+      type: Boolean,
+      default: false
     }
   },
   directives: {
@@ -108,7 +64,6 @@ export default {
         el.style.position = 'absolute'
         var offsetX = 0
         var offsetY = 0
-
         function down (e) {
           if (!binding.value) {
             return
@@ -160,6 +115,7 @@ export default {
         }
         const index = vnode.data.key
         const nodeList = el.__vue__.$parent.nodeList
+        const getPosition = el.__vue__.$parent.getPosition
         const linkList = el.__vue__.$parent.linkList
         const data = nodeList[index]
         let cursorX, cursorY
@@ -189,8 +145,11 @@ export default {
         }
         function move (e) {
           const container = document.querySelector('.v-process-platform-container')
-          cursorX = e.pageX - container.offsetParent.offsetLeft + container.scrollLeft
+          const tabWidth = document.querySelector('.v-process-tools').offsetWidth
+          cursorX = e.pageX - container.offsetParent.offsetLeft + container.scrollLeft - tabWidth
           cursorY = e.pageY - container.offsetParent.offsetTop + container.scrollTop
+          // cursorX = e.pageX + container.scrollLeft
+          // cursorY = e.pageY + container.scrollTop
           linkItem.position.endX = cursorX
           linkItem.position.endY = cursorY
         }
@@ -201,7 +160,9 @@ export default {
           const data = nodeList[index]
           let isEnd = false
           // 目标节点名称
-          const toName = e.target.textContent
+          // const toName = e.target.textContent
+          const toName = e.target.dataset.id
+          // console.log(el.dataset.id)
           // 拿到该节点所有的fromNode
           const nodeToBeLink = nodeList.find(node => node.name === toName)
           // 来自节点的列表
@@ -218,14 +179,27 @@ export default {
           const isfrom = fromList.some(fromNode => {
             return toName === fromNode
           })
+
+          const toList = linkList.filter(link => {
+            if (!link.to) {
+              return false
+            }
+            return link.to.name === toName
+          }).map(item => item.from.name)
+          const isTo = toList.some(toNode => {
+            return data.name === toNode
+          })
+
           // 如果是来自节点，就不挂载
-          if (isfrom) {
+          if (isfrom || isTo) {
             linkList.pop()
             e.stopPropagation()
             removeEventListener('mousemove', move)
             removeEventListener('mouseup', up)
             return
           }
+          // 判断是否有已经连过线，如果是就不挂
+
           // 是否是其他节点
           isEnd = nodeList.some(node => {
             return (
@@ -239,15 +213,9 @@ export default {
           // 是其他节点
           if (isEnd) {
             // 设置 line 结束的地方 和 开始的地方
-            linkItem.position.endX = nodeToBeLink.left + nodeToBeLink.width / 2
-            if (data.top < nodeToBeLink.top) {
-              linkItem.position.endY = nodeToBeLink.top
-              linkItem.position.startY = data.top + data.height
-            } else {
-              linkItem.position.endY = nodeToBeLink.top + nodeToBeLink.height
-              linkItem.position.startY = data.top
-            }
             linkItem.to = { ...nodeToBeLink }
+            const position = getPosition(linkItem.to, linkItem.from)
+            linkItem.position = { ...position }
             linkItem.lineStyle = { ...linkItem.lineStyle, dash: false }
             nodeList[0].flag = false
             // 再次预防 to 和 from 一样
@@ -277,85 +245,14 @@ export default {
             if (node.name === link.to.name) {
               link.to = { ...node }
               toNode = node
-              const obj = getPosition(toNode, link.from)
+              const obj = this.getPosition(toNode, link.from)
               link.position = { ...obj }
             }
             if (node.name === link.from.name) {
               link.from = { ...node }
               fromNode = node
-              const obj = getPosition(link.to, fromNode)
+              const obj = this.getPosition(link.to, fromNode)
               link.position = { ...obj }
-            }
-            function getPosition (toNode, fromNode) {
-              let startX, startY, endX, endY
-              // 比例 2
-              const tan = fromNode.width / fromNode.height
-              // left 差
-              const Dleft = fromNode.left - toNode.left
-              // top 差
-              const Dtop = fromNode.top - toNode.top
-
-              const currentTan = Math.abs(Dleft / Dtop)
-              // 用top计算位置 left相对中心点不动
-              if (currentTan > tan) {
-                const y = Math.abs(0.5 * toNode.width * Dtop / Dleft)
-                if (Dtop > 0 && Dleft > 0) {
-                  startX = fromNode.left
-                  startY = fromNode.top + 0.5 * fromNode.height - y
-                  endX = toNode.left + toNode.width
-                  endY = toNode.top + 0.5 * toNode.height + y
-                }
-                if (Dtop > 0 && Dleft < 0) {
-                  startX = fromNode.left + fromNode.width
-                  startY = fromNode.top + 0.5 * fromNode.height - y
-                  endX = toNode.left
-                  endY = toNode.top + 0.5 * toNode.height + y
-                }
-                if (Dtop < 0 && Dleft > 0) {
-                  startX = fromNode.left
-                  startY = fromNode.top + 0.5 * fromNode.height + y
-                  endX = toNode.left + toNode.width
-                  endY = toNode.top + 0.5 * toNode.height - y
-                }
-                if (Dtop < 0 && Dleft < 0) {
-                  startX = fromNode.left + fromNode.width
-                  startY = fromNode.top + 0.5 * fromNode.height + y
-                  endX = toNode.left
-                  endY = toNode.top + 0.5 * toNode.height - y
-                }
-              } else {
-                const x = Math.abs(0.5 * toNode.height * Dleft / Dtop)
-                if (Dtop > 0 && Dleft > 0) {
-                  startX = fromNode.left + 0.5 * fromNode.width - x
-                  startY = fromNode.top
-                  endX = toNode.left + 0.5 * toNode.width + x
-                  endY = toNode.top + toNode.height
-                }
-                if (Dtop > 0 && Dleft < 0) {
-                  startX = fromNode.left + 0.5 * fromNode.width + x
-                  startY = startY = fromNode.top
-                  endX = toNode.left + 0.5 * toNode.width - x
-                  endY = toNode.top + toNode.height
-                }
-                if (Dtop < 0 && Dleft > 0) {
-                  startX = fromNode.left + 0.5 * fromNode.width - x
-                  startY = fromNode.top + fromNode.height
-                  endX = toNode.left + 0.5 * toNode.width + x
-                  endY = toNode.top
-                }
-                if (Dtop < 0 && Dleft < 0) {
-                  startX = fromNode.left + 0.5 * fromNode.width + x
-                  startY = fromNode.top + fromNode.height
-                  endX = toNode.left + 0.5 * toNode.width - x
-                  endY = toNode.top
-                }
-              }
-              return {
-                startX,
-                startY,
-                endX,
-                endY
-              }
             }
           })
         })
@@ -363,19 +260,100 @@ export default {
       // immediate:true,
       deep: true
     }
+  },
+  methods: {
+    getPosition (toNode, fromNode) {
+      let startX, startY, endX, endY
+      // 比例 2
+      const tan = fromNode.width / fromNode.height
+      // left 差
+      const Dleft = fromNode.left - toNode.left
+      // top 差
+      const Dtop = fromNode.top - toNode.top
+
+      const currentTan = Math.abs(Dleft / Dtop)
+      // 用top计算位置 left相对中心点不动
+      if (currentTan > tan) {
+        const y = Math.abs(0.5 * toNode.width * Dtop / Dleft)
+        if (Dtop >= 0 && Dleft >= 0) {
+          startX = fromNode.left
+          startY = fromNode.top + 0.5 * fromNode.height - y
+          endX = toNode.left + toNode.width
+          endY = toNode.top + 0.5 * toNode.height + y
+        }
+        if (Dtop > 0 && Dleft < 0) {
+          startX = fromNode.left + fromNode.width
+          startY = fromNode.top + 0.5 * fromNode.height - y
+          endX = toNode.left
+          endY = toNode.top + 0.5 * toNode.height + y
+        }
+        if (Dtop < 0 && Dleft > 0) {
+          startX = fromNode.left
+          startY = fromNode.top + 0.5 * fromNode.height + y
+          endX = toNode.left + toNode.width
+          endY = toNode.top + 0.5 * toNode.height - y
+        }
+        if (Dtop <= 0 && Dleft <= 0) {
+          startX = fromNode.left + fromNode.width
+          startY = fromNode.top + 0.5 * fromNode.height + y
+          endX = toNode.left
+          endY = toNode.top + 0.5 * toNode.height - y
+        }
+      } else {
+        const x = Math.abs(0.5 * toNode.height * Dleft / Dtop)
+        if (Dtop >= 0 && Dleft >= 0) {
+          startX = fromNode.left + 0.5 * fromNode.width - x
+          startY = fromNode.top
+          endX = toNode.left + 0.5 * toNode.width + x
+          endY = toNode.top + toNode.height
+        }
+        if (Dtop > 0 && Dleft < 0) {
+          startX = fromNode.left + 0.5 * fromNode.width + x
+          startY = startY = fromNode.top
+          endX = toNode.left + 0.5 * toNode.width - x
+          endY = toNode.top + toNode.height
+        }
+        if (Dtop < 0 && Dleft > 0) {
+          startX = fromNode.left + 0.5 * fromNode.width - x
+          startY = fromNode.top + fromNode.height
+          endX = toNode.left + 0.5 * toNode.width + x
+          endY = toNode.top
+        }
+        if (Dtop <= 0 && Dleft <= 0) {
+          startX = fromNode.left + 0.5 * fromNode.width + x
+          startY = fromNode.top + fromNode.height
+          endX = toNode.left + 0.5 * toNode.width - x
+          endY = toNode.top
+        }
+      }
+      return {
+        startX,
+        startY,
+        endX,
+        endY
+      }
+    },
+    nodeDbclick (item) {
+      console.log(item)
+    },
+    lineClick (item) {
+      console.log(item)
+    }
   }
 }
 </script>
 
 <style lang="less">
 .v-process-platform-container {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  top: 0px;
-  left: 0px;
+  border:1px solid #ccc;
+  border-left: none;
+  position: relative;
   overflow: auto;
-  z-index:9999;
+  // width: 100%;
+  height: 100%;
+  // top: 0px;
+  // left: 0px;
+  // z-index:9999;
   .v-process-platform {
     position: absolute;
     top:0px;

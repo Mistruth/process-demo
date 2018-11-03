@@ -25,7 +25,7 @@ html,body,#app {
   height: 100%;
 }
 .container {
-  width: 80%;
+  width: 1300px;
   height: 80%;
   margin: 50px auto;
 }
