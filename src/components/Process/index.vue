@@ -6,19 +6,23 @@
     ></Tools>
     <Platform
       :key="1"
-      v-if="drag"
+      v-if="componentSwitch"
       :drag="drag"
       :link="link"
       :node-list="nodeList"
       :link-list="linkList"
+      @delNode="delNode"
+      @dblclickLine="dblclickLine"
     ></Platform>
     <Platform
-      v-else
       :key="2"
+      v-if="!componentSwitch"
       :drag="drag"
       :link="link"
       :node-list="nodeList"
       :link-list="linkList"
+      @delNode="delNode"
+      @dblclickLine="dblclickLine"
     ></Platform>
   </div>
 </template>
@@ -43,7 +47,10 @@ export default {
           height: 50,
           flag: true,
           alias: '节点1',
-          index: 1
+          lastIndex: 1,
+          style: {
+            delBtn: false
+          }
         },
         {
           name: '节点2',
@@ -52,7 +59,10 @@ export default {
           width: 100,
           height: 50,
           alias: '节点2',
-          index: 2
+          lastIndex: 2,
+          style: {
+            delBtn: false
+          }
         },
         {
           name: '节点3',
@@ -61,7 +71,10 @@ export default {
           width: 100,
           height: 50,
           alias: '节点3',
-          index: 3
+          lastIndex: 3,
+          style: {
+            delBtn: false
+          }
         },
         {
           name: '节点4',
@@ -70,7 +83,10 @@ export default {
           width: 100,
           height: 50,
           alias: '节点4',
-          index: 4
+          lastIndex: 4,
+          style: {
+            delBtn: false
+          }
         }
       ]
     },
@@ -78,6 +94,7 @@ export default {
       type: Array,
       default: () => [
         {
+          name: 'link1',
           to: {
             name: '节点2',
             left: 100,
@@ -108,17 +125,61 @@ export default {
   data () {
     return {
       drag: true,
-      link: false
+      link: false,
+      componentSwitch: true
     }
   },
   methods: {
     setDrag (drag) {
-      this.drag = drag
-      this.link = !drag
+      this.drag = true
+      this.link = false
+      this.componentSwitch = !this.componentSwitch
     },
     setLink (link) {
-      this.link = link
-      this.drag = !link
+      this.link = true
+      this.drag = false
+      this.nodeList.forEach(item => {
+        item.style.delBtn = false
+      })
+      this.componentSwitch = !this.componentSwitch
+    },
+    delNode (data) {
+      const indexNode = this.nodeList.findIndex(item => item.name === data.name)
+      let arr = []
+      this.linkList.forEach((item, index) => {
+        if (item.from.name === data.name || item.to.name === data.name) {
+          arr.push(index)
+        }
+      })
+      this.linkList = this.deleteIndex(this.linkList, arr)
+      this.nodeList.splice(indexNode, 1)
+      this.componentSwitch = !this.componentSwitch
+    },
+    deleteIndex (array, indexArray) {
+      var indexLength = indexArray.length
+      indexArray.sort(function (a, b) {
+        if (a - b > 0) {
+          return 1
+        } else if (a - b < 0) {
+          return -1
+        } else {
+          return 0
+        }
+      })
+      var deltimes = 0
+      for (var i = 0; i < indexLength; i++) {
+        array.splice((indexArray[i] - deltimes), 1)
+        deltimes++
+      }
+      return array
+    },
+    dblclickLine (data) {
+      if (this.link) {
+        return
+      }
+      const index = this.linkList.findIndex(item => item.name === data.name)
+      this.linkList.splice(index, 1)
+      this.componentSwitch = !this.componentSwitch
     }
   }
 }

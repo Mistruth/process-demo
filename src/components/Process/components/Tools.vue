@@ -1,7 +1,7 @@
 <template>
   <div class="v-process-tools" :style="{width:width}">
     <el-tabs v-model="activeName">
-      <el-tab-pane label="添加节点" name="first">
+      <el-tab-pane label="操作工具" name="first">
         <div class="nodeTypes-container">
           <div @click="setDrag" :class="['v-process-node-template','node-type-1',{'press-btn-bgc':select}]" data-type="1">选择器</div>
           <div @click="setLink" :class="['v-process-node-template','node-type-2',{'press-btn-bgc':link}]" data-type="2">连线</div>
@@ -48,7 +48,7 @@ export default {
           offsetY = e.pageY - el.offsetTop
           if (binding.modifiers.cursor) el.style.cursor = 'move'
           el.style.backgroundColor = 'rgb(55, 145, 235)'
-          el.style.zIndex = 10001
+          el.style.zIndex = 1001
           addEventListener('mousemove', move)
           addEventListener('mouseup', up)
         }
@@ -88,15 +88,18 @@ export default {
           if (Dx > minDx && Dx < maxDx && Dy > minDy && Dy < maxDy) {
             const nodeList = vnode.context.$parent.nodeList
             const length = nodeList.length
-            const index = nodeList[length - 1].index + 1
+            const lastIndex = length === 0 ? 1 : nodeList[length - 1].lastIndex + 1
             const newNode = {
               name: 'node' + Math.random(),
-              alias: `节点${index}`,
+              alias: `节点${lastIndex}`,
               left: newX - toolWidth,
               top: newY,
               width: 100,
               height: 50,
-              index
+              lastIndex,
+              style: {
+                delBtn: false
+              }
             }
             nodeList.push(newNode)
           }
@@ -104,7 +107,7 @@ export default {
           el.style.left = oldX + 'px'
           el.style.top = oldY + 'px'
           el.style.backgroundColor = '#409EFF'
-          el.style.zIndex = 10000
+          el.style.zIndex = 1000
           removeEventListener('mousemove', move)
           removeEventListener('mouseup', up)
         }
@@ -133,11 +136,17 @@ export default {
   float: left;
   padding: 5px 10px;
   border: 1px solid #ccc;
-  border-radius: 3px;
+  border-radius: 2px;
   box-sizing: border-box;
   .el-tabs__content {
     overflow: visible;
     position: static;
+  }
+  .el-tabs__item {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
   }
 }
 .press-btn-bgc {
@@ -161,11 +170,15 @@ export default {
     background-color: #409eff;
     width: 100px;
     cursor: pointer;
-    border-radius: 3px;
-    z-index: 10000;
+    border-radius: 2px;
+    z-index: 1000;
     border: 1px solid transparent;
     &:hover {
+      background-color: #3392f1;
+    }
+    &:active {
       border-color: #eee;
+      background-color: rgb(3, 121, 240)!important;
     }
   }
   .node-type-1 {
@@ -200,5 +213,6 @@ export default {
     left: 145px;
     top: 180px;
   }
+
 }
 </style>

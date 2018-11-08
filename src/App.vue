@@ -23,6 +23,7 @@ export default {
 }
 html,body,#app {
   height: 100%;
+  overflow: hidden;
 }
 .container {
   width: 1300px;

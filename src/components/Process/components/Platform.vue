@@ -2,28 +2,33 @@
   <div class="v-process-platform-container">
     <div class="v-process-platform">
       <Node
-      @dblclick.native="nodeDbclick(item)"
-      v-for="(item,index) in nodeList"
-      :key="index"
-      :name="item.name"
-      v-drag.cursor="drag"
-      :data="item"
-      v-link="link"></Node>
-      <svg class="v-process-svg"  xmlns="http://www.w3.org/2000/svg">
+        @dblclick.native="nodeDbclick(item)"
+        v-for="(item,index) in nodeList"
+        :key="item.name"
+        :name="item.name"
+        :index="index"
+        v-drag.cursor="drag"
+        :data="item"
+        v-link="link"
+        @del="delNode"></Node>
+      <svg class="v-process-svg" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <marker id="arrow" markerUnits="strokeWidth" markerWidth="12" markerHeight="12" viewBox="0 0 12 12" refX="6" refY="6" orient="auto">
             <path xmlns="http://www.w3.org/2000/svg" d="M2,2 L10,6 L2,10 L6,6 L2,2" class="v-process-arrow" />
           </marker>
         </defs>
         <line
-          @click="lineClick(item)"
-          v-for="(item,index) in linkList" :key="'line'+index"
+          v-dbclick
+          v-for="(item,index) in linkList"
+          :key="'line'+index"
           :class="['v-process-line-default',{'v-process-linking':item.lineStyle.dash}]"
           :x1="item.position.startX"
           :y1="item.position.startY"
           :x2="item.position.endX"
           :y2="item.position.endY"
-          />
+          :data="item"
+          >
+          </line>
       </svg>
     </div>
   </div>
@@ -31,12 +36,17 @@
 
 <script>
 import Node from './Node.vue'
+let platformVm
 export default {
   components: {
     Node
   },
   data () {
-    return {}
+    // 获取当前vue实例
+    platformVm = this
+    return {
+      lineData: {}
+    }
   },
   props: {
     nodeList: {
@@ -59,8 +69,7 @@ export default {
   directives: {
     drag: {
       bind (el, binding, vnode) {
-        const index = vnode.data.key
-        // const name = vnode.data.name
+        const index = vnode.data.attrs.index
         el.style.position = 'absolute'
         var offsetX = 0
         var offsetY = 0
@@ -77,14 +86,15 @@ export default {
         }
         function move (e) {
           // 获取nodeList
-          const nodeList = el.__vue__.$parent.nodeList
+          const container = document.querySelector('.v-process-platform-container')
+          const nodeList = platformVm.nodeList
           // const linkList = el.__vue__.$parent.linkList
           const maxLeft = el.offsetParent.offsetWidth - el.offsetWidth
           const maxTop = el.offsetParent.offsetHeight - el.offsetHeight
           const minLeft = 0
           const minTop = 0
           const x = e.pageX - offsetX
-          const y = e.pageY - offsetY
+          const y = e.pageY - offsetY + container.scrollTop
           if (x < maxLeft && x > minLeft) {
             el.style.left = x + 'px'
           } else {
@@ -104,7 +114,6 @@ export default {
           removeEventListener('mousemove', move)
           removeEventListener('mouseup', up)
         }
-
         el.addEventListener('mousedown', down)
       }
     },
@@ -113,10 +122,12 @@ export default {
         if (!binding.value) {
           return
         }
-        const index = vnode.data.key
-        const nodeList = el.__vue__.$parent.nodeList
-        const getPosition = el.__vue__.$parent.getPosition
-        const linkList = el.__vue__.$parent.linkList
+        // 当前vue实例
+        const vue = platformVm
+        const index = vnode.data.attrs.index
+        const nodeList = vue.nodeList
+        const getPosition = vue.getPosition
+        const linkList = vue.linkList
         const data = nodeList[index]
         let cursorX, cursorY
         let linkItem = {}
@@ -126,6 +137,7 @@ export default {
           startX = endX = data.left + data.width / 2
           startY = endY = data.top + data.height / 2
           linkItem = {
+            name: 'link' + Math.random(),
             from: {
               ...data
             },
@@ -154,43 +166,18 @@ export default {
           linkItem.position.endY = cursorY
         }
         function up (e) {
-          const index = vnode.data.key
-          const nodeList = el.__vue__.$parent.nodeList
-          const linkList = el.__vue__.$parent.linkList
+          // const nodeList = vue.nodeList
+          // const linkList = vue.linkList
+          // from节点对象
           const data = nodeList[index]
-          let isEnd = false
-          // 目标节点名称
-          // const toName = e.target.textContent
+          // 目标节点id
           const toName = e.target.dataset.id
-          // console.log(el.dataset.id)
-          // 拿到该节点所有的fromNode
-          const nodeToBeLink = nodeList.find(node => node.name === toName)
+          // 判断是否合格的flag
+          let isEnd = false
           // 来自节点的列表
-          const fromList = linkList
-            .filter(link => {
-              if (!link.to) {
-                return false
-              }
-              return link.to.name === data.name
-            })
-            .map(item => item.from.name)
-          // console.log(fromList)
-          // 是否是来自的节点
-          const isfrom = fromList.some(fromNode => {
-            return toName === fromNode
-          })
-
-          const toList = linkList.filter(link => {
-            if (!link.to) {
-              return false
-            }
-            return link.to.name === toName
-          }).map(item => item.from.name)
-          const isTo = toList.some(toNode => {
-            return data.name === toNode
-          })
-
-          // 如果是来自节点，就不挂载
+          const isfrom = vue.validateFrom(linkList, data, toName)
+          const isTo = vue.validateTo(linkList, data, toName)
+          // 判断是否有已经连过线，如果是就不挂
           if (isfrom || isTo) {
             linkList.pop()
             e.stopPropagation()
@@ -198,8 +185,6 @@ export default {
             removeEventListener('mouseup', up)
             return
           }
-          // 判断是否有已经连过线，如果是就不挂
-
           // 是否是其他节点
           isEnd = nodeList.some(node => {
             return (
@@ -212,13 +197,14 @@ export default {
           })
           // 是其他节点
           if (isEnd) {
+            const nodeToBeLink = nodeList.find(node => node.name === toName)
             // 设置 line 结束的地方 和 开始的地方
             linkItem.to = { ...nodeToBeLink }
             const position = getPosition(linkItem.to, linkItem.from)
             linkItem.position = { ...position }
             linkItem.lineStyle = { ...linkItem.lineStyle, dash: false }
             nodeList[0].flag = false
-            // 再次预防 to 和 from 一样
+
             if (linkItem.to.name === linkItem.from.name) {
               linkList.pop()
             }
@@ -230,6 +216,36 @@ export default {
           removeEventListener('mouseup', up)
         }
         el.addEventListener('mousedown', down)
+      }
+    },
+    dbclick: {
+      bind (el, binding, vnode) {
+        const itemData = vnode.data.attrs.data
+        el.addEventListener('dblclick', dbclick)
+        function dbclick () {
+          if (platformVm.link) {
+            platformVm.$message({
+              message: '请切换至选择器双击操作连线',
+              type: 'warning'
+            })
+            return
+          }
+          platformVm.$confirm(`是否删除该连线`, '提示', {
+            confirmButtonText: '确定',
+            cancelButtonText: '取消',
+            type: 'warning'
+          })
+            .then(() => {
+              platformVm.lineData = itemData
+              platformVm.$emit('dblclickLine', itemData)
+            })
+            .catch(() => {
+              platformVm.$message({
+                message: '取消删除',
+                type: 'info'
+              })
+            })
+        }
       }
     }
   },
@@ -334,18 +350,55 @@ export default {
       }
     },
     nodeDbclick (item) {
-      console.log(item)
+      if (this.link) {
+        this.$message({
+          message: '请切换到选择器进行节点操作',
+          type: 'warning'
+        })
+        return
+      }
+      item.style.delBtn = !item.style.delBtn
     },
-    lineClick (item) {
-      console.log(item)
+    validateFrom (linkList, fromNode, toNodeName) {
+      const fromList = linkList
+        .filter(link => {
+          if (!link.to) {
+            return false
+          }
+          return link.to.name === fromNode.name
+        })
+        .map(item => item.from.name)
+      const isfrom = fromList.some(fromNodeName => {
+        return toNodeName === fromNodeName
+      })
+      return isfrom
+    },
+    validateTo (linkList, fromNode, toName) {
+      const toList = linkList.filter(link => {
+        if (!link.to) {
+          return false
+        }
+        return link.to.name === toName
+      }).map(item => item.from.name)
+
+      const isTo = toList.some(toNode => {
+        return fromNode.name === toNode
+      })
+      return isTo
+    },
+    delNode (data) {
+      this.$emit('delNode', data)
     }
+  },
+  created () {
+
   }
 }
 </script>
 
 <style lang="less">
 .v-process-platform-container {
-  border:1px solid #ccc;
+  border: 1px solid #ccc;
   border-left: none;
   position: relative;
   overflow: auto;
@@ -356,8 +409,8 @@ export default {
   // z-index:9999;
   .v-process-platform {
     position: absolute;
-    top:0px;
-    left:0px;
+    top: 0px;
+    left: 0px;
     width: 1500px;
     height: 2000px;
   }
@@ -368,6 +421,7 @@ export default {
   width: 100%;
 }
 .v-process-line-default {
+  position: relative;
   stroke: #909399;
   stroke-width: 2px;
   fill: none;
@@ -375,10 +429,16 @@ export default {
   cursor: pointer;
 }
 .v-process-linking {
-  stroke-dasharray:5,5;
+  stroke-dasharray: 5, 5;
   // stroke: #F56C6C;
 }
 .v-process-arrow {
-  fill:#909399;
+  fill: #909399;
+}
+.v-process-line-btn {
+  position: absolute;
+  height: 30px;
+  width: 30px;
+  background-color: #000;
 }
 </style>
